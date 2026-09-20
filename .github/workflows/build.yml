@@ -64,7 +64,7 @@ jobs:
         run: ./tools/fetch-sherpa-onnx.sh
 
       - name: Build APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew :app:assembleRelease
 
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
@@ -73,7 +73,7 @@ jobs:
           name: Dictate Build #${{ github.run_number }}
           draft: false
           prerelease: false
-          files: app/build/outputs/apk/debug/*.apk
+          files: app/build/outputs/apk/release/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
