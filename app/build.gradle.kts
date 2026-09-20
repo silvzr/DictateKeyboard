@@ -84,7 +84,7 @@ configure<ApplicationExtension> {
         // account. Real users pay nothing for it — the bundle is split per architecture, so a phone
         // only ever downloads the libraries it can run. See tools/fetch-sherpa-onnx.sh.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
 
         buildConfigField("String", "BUILD_COMMIT_HASH", "\"${getGitCommitHash().get()}\"")
@@ -125,13 +125,22 @@ configure<ApplicationExtension> {
     } else {
         null
     }
+    val defaultKeystoreFile = rootProject.file("signing.keystore")
+
     signingConfigs {
-        keystoreProps?.let { props ->
+        if (keystoreProps != null) {
             create("release") {
-                storeFile = rootProject.file(props.getProperty("storeFile"))
-                storePassword = props.getProperty("storePassword")
-                keyAlias = props.getProperty("keyAlias")
-                keyPassword = props.getProperty("keyPassword")
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        } else if (defaultKeystoreFile.exists()) {
+            create("release") {
+                storeFile = defaultKeystoreFile
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
             }
         }
     }
@@ -157,8 +166,8 @@ configure<ApplicationExtension> {
         named("release") {
             versionNameSuffix = projectVersionNameSuffix
 
-            if (keystoreProps != null) {
-                signingConfig = signingConfigs.getByName("release")
+            signingConfigs.findByName("release")?.let {
+                signingConfig = it
             }
 
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
