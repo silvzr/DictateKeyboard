@@ -3015,22 +3015,35 @@ object DictateController {
         stashRecording(context)
     }
 
-    private fun canContinueRecordingWithFloatingButton(): Boolean {
-        if (outputTarget != OutputTarget.IME) return false
-        if (startJob?.isActive != true && _state.value !is UiState.Recording) return false
+    private fun isFloatingButtonHandoffSupported(): Boolean {
         return prefs.dictate.floatingButtonEnabled.get() &&
             prefs.dictate.floatingButtonShowWithDictateKeyboard.get() &&
             prefs.dictate.floatingButtonContinueKeyboardRecording.get() &&
             DictateAccessibilityService.isRunning
     }
 
+    private fun canContinueRecordingWithFloatingButton(): Boolean {
+        if (outputTarget != OutputTarget.IME) return false
+        if (startJob?.isActive != true && _state.value !is UiState.Recording) return false
+        return isFloatingButtonHandoffSupported()
+    }
+
     private fun handoffToFloatingButton() {
         outputTarget = OutputTarget.OVERLAY
+        if (prefs.dictate.realtimePreserveOnHide.get()) {
+            DictateAccessibilityService.setInitialPreview(realtimeShown.toString())
+        } else {
+            realtimeContext?.let { ctx ->
+                runCatching { ImeDictationSink(ctx).clearDictationPreview(realtimeShown.toString()) }
+            }
+            realtimeShown.setLength(0)
+            DictateAccessibilityService.setInitialPreview("")
+        }
         DictateAccessibilityService.startMicForeground()
     }
 
     fun onKeyboardShown() {
-        if (_state.value is UiState.Recording && outputTarget == OutputTarget.OVERLAY && canContinueRecordingWithFloatingButton()) {
+        if (_state.value is UiState.Recording && outputTarget == OutputTarget.OVERLAY && isFloatingButtonHandoffSupported()) {
             outputTarget = OutputTarget.IME
         }
     }
