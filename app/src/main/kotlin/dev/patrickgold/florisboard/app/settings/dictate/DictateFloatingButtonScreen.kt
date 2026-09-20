@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Vibration
@@ -161,12 +162,29 @@ fun DictateFloatingButtonScreen() = FlorisScreen {
 
         if (enabled && serviceEnabled) {
             SwitchPreference(
+                prefs.dictate.floatingButtonRealtimeTranscription,
+                icon = Icons.Default.GraphicEq,
+                modifier = Modifier.settingsSearchAnchor("dictate__floating_button_realtime_title"),
+                title = stringRes(R.string.dictate__realtime_title),
+                summary = stringRes(R.string.dictate__realtime_summary),
+            )
+
+            SwitchPreference(
                 prefs.dictate.floatingButtonShowWithDictateKeyboard,
                 icon = Icons.Default.Keyboard,
                 modifier = Modifier.settingsSearchAnchor("dictate__floating_button_show_with_keyboard_title"),
                 title = stringRes(R.string.dictate__floating_button_show_with_keyboard_title),
                 summaryOn = stringRes(R.string.dictate__floating_button_show_with_keyboard_summary_on),
                 summaryOff = stringRes(R.string.dictate__floating_button_show_with_keyboard_summary_off),
+            )
+
+            SwitchPreference(
+                prefs.dictate.floatingButtonContinueKeyboardRecording,
+                icon = Icons.Default.Mic,
+                modifier = Modifier.settingsSearchAnchor("dictate__floating_button_continue_keyboard_rec_title"),
+                title = stringRes(R.string.dictate__floating_button_continue_keyboard_rec_title),
+                summary = stringRes(R.string.dictate__floating_button_continue_keyboard_rec_summary),
+                enabledIf = { prefs.dictate.floatingButtonShowWithDictateKeyboard isEqualTo true },
             )
 
             // Where it may appear at all (issue #392), directly under the other "where" switch: a

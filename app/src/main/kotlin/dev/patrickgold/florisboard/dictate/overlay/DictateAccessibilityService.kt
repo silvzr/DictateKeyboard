@@ -1475,5 +1475,11 @@ class DictateAccessibilityService : AccessibilityService() {
 
         /** Remove the live preview entirely (recording cancelled). */
         fun clearPreview() { instance?.clearPreviewOnFocused() }
+
+        /** Promotes the accessibility service to microphone foreground service. */
+        fun startMicForeground() { instance?.startMicForeground() }
+
+        /** Demotes the accessibility service from microphone foreground service. */
+        fun stopMicForeground() { instance?.stopMicForeground() }
     }
 }
