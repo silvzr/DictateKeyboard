@@ -597,9 +597,20 @@ class DictateAccessibilityService : AccessibilityService() {
      * the field the user tapped — so a browser whose web field this cannot name is still served correctly.
      * Only if that path fails too does the caller fall back to the clipboard.
      */
-    private fun dictationTarget(): AccessibilityNodeInfo? =
-        editableUnderFocus(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
-            ?: editableUnderFocus(rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
+    private fun dictationTarget(): AccessibilityNodeInfo? {
+        editableUnderFocus(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))?.let { return it }
+        editableUnderFocus(rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT))?.let { return it }
+        val appWindows = runCatching {
+            windows.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .sortedByDescending { it.isFocused }
+        }.getOrNull() ?: emptyList()
+        for (w in appWindows) {
+            val root = w.root ?: continue
+            editableUnderFocus(root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT))?.let { return it }
+            editableUnderFocus(root)?.let { return it }
+        }
+        return null
+    }
 
     /**
      * Whether [node] lives in a soft-keyboard window, i.e. a text field belonging to the IME itself —
@@ -1061,11 +1072,13 @@ class DictateAccessibilityService : AccessibilityService() {
         lastPreviewMs = now
     }
 
-    private fun commitPreviewFinalOnFocused(finalText: String): Boolean {
-        val landed = applyPreviewDiff(previewShown, finalText)   // no throttle — final result always lands
+    private fun commitPreviewFinalOnFocused(finalText: String, prevText: String = ""): Boolean {
+        val base = if (previewShown.isEmpty() && prevText.isNotEmpty()) prevText else previewShown
+        val landed = applyPreviewDiff(base, finalText)   // no throttle — final result always lands
         previewShown = ""
         lastPreviewMs = 0L
-        return landed
+        if (landed) return true
+        return commitTextIntoFocused(finalText, verify = true)
     }
 
     private fun clearPreviewOnFocused() {
@@ -1470,10 +1483,24 @@ class DictateAccessibilityService : AccessibilityService() {
         fun setPreview(full: String) { instance?.setPreviewThrottled(full) }
 
         /** Replace the live preview with the finished/reworded [finalText] (unthrottled). */
-        fun commitPreviewFinal(finalText: String): Boolean =
-            instance?.commitPreviewFinalOnFocused(finalText) ?: false
+        fun commitPreviewFinal(finalText: String, prevText: String = ""): Boolean =
+            instance?.commitPreviewFinalOnFocused(finalText, prevText) ?: false
+
+        /** Sets the initial preview shown (used on handoff from keyboard when preview was preserved). */
+        fun setInitialPreview(text: String) {
+            instance?.let {
+                it.previewShown = text
+                it.lastPreviewMs = SystemClock.uptimeMillis()
+            }
+        }
 
         /** Remove the live preview entirely (recording cancelled). */
         fun clearPreview() { instance?.clearPreviewOnFocused() }
+
+        /** Promotes the accessibility service to microphone foreground service. */
+        fun startMicForeground() { instance?.startMicForeground() }
+
+        /** Demotes the accessibility service from microphone foreground service. */
+        fun stopMicForeground() { instance?.stopMicForeground() }
     }
 }

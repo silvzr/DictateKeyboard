@@ -2132,9 +2132,15 @@ object DictateController {
 
     // --- Real-time streaming (issue #128) -------------------------------------------------------
 
+    private fun isRealtimeEnabledForTarget(target: OutputTarget = outputTarget): Boolean = when (target) {
+        OutputTarget.OVERLAY -> prefs.dictate.floatingButtonRealtimeTranscription.get()
+        OutputTarget.IME -> prefs.dictate.realtimeTranscription.get()
+        OutputTarget.RECOGNITION_SERVICE -> false
+    }
+
     /** The realtime wire API to use for the active transcription account, or null if realtime shouldn't run. */
-    private fun realtimeApiForActiveAccount(): RealtimeApi? {
-        if (!prefs.dictate.realtimeTranscription.get()) return null
+    private fun realtimeApiForActiveAccount(target: OutputTarget = outputTarget): RealtimeApi? {
+        if (!isRealtimeEnabledForTarget(target)) return null
         val account = transcriptionAccount()
         val preset = presetFor(account)
         // A server of the user's own usually has no key at all (#249), so requiring one here would switch
@@ -2148,8 +2154,8 @@ object DictateController {
      * transcription doesn't apply. Checked before [realtimeApiForActiveAccount] because that one bails
      * out on a blank API key, which the on-device provider always has.
      */
-    private fun localStreamingModelDir(context: Context): File? {
-        if (!prefs.dictate.realtimeTranscription.get()) return null
+    private fun localStreamingModelDir(context: Context, target: OutputTarget = outputTarget): File? {
+        if (!isRealtimeEnabledForTarget(target)) return null
         val account = transcriptionAccount()
         if (presetFor(account).transcriptionApi != TranscriptionApi.LOCAL_ONDEVICE) return null
         // The live model has its own slot on the local account (#233) — `realtimeModel`, which for this
@@ -2164,13 +2170,13 @@ object DictateController {
     }
 
     /**
-     * True if the next recording should stream in real time: the global toggle is on and either the cloud
-     * provider supports realtime or (with [context]) an on-device streaming model is installed. Without a
-     * context only the cloud case can be answered, since the local check has to look at the filesystem.
+     * True if the next recording should stream in real time: the toggle for the current target is on
+     * and either the cloud provider supports realtime or (with [context]) an on-device streaming model
+     * is installed. Without a context only the cloud case can be answered.
      */
-    fun isRealtimeActive(context: Context? = null): Boolean =
-        realtimeApiForActiveAccount() != null ||
-            (context != null && localStreamingModelDir(context.applicationContext) != null)
+    fun isRealtimeActive(context: Context? = null, target: OutputTarget = outputTarget): Boolean =
+        realtimeApiForActiveAccount(target) != null ||
+            (context != null && localStreamingModelDir(context.applicationContext, target) != null)
 
     /** True while a real-time streaming recording is actually in progress (a session is open). */
     fun isRealtimeRecording(): Boolean = realtimeSession != null
@@ -2208,19 +2214,7 @@ object DictateController {
         realtimeContext = appContext
         realtimeShown.setLength(0)
         realtimeTranscript.setLength(0)
-        // The floating button always holds the words back, whatever the preference says (#357).
-        //
-        // Live typing rewrites the field several times a second, and outside our own keyboard that goes
-        // through the accessibility route: every update is a diff against what we *believe* is in the
-        // field, and the moment one write is refused or the app edits the field itself, the rest of the
-        // dictation is computed against a fiction — which shows up as the text stopping mid-sentence and
-        // never catching up. Inside the keyboard there is a real InputConnection and the same updates are
-        // cheap and exact; over the overlay they are neither.
-        //
-        // The stream itself still runs, so this costs nothing: the transcript is already there when the
-        // button is tapped and lands in one commit — the same verified insert a batch dictation does, and
-        // without the provider round trip a batch dictation would still be waiting for.
-        realtimeHidden = prefs.dictate.realtimeHidePreview.get() || outputTarget == OutputTarget.OVERLAY
+        realtimeHidden = prefs.dictate.realtimeHidePreview.get()
         val closed = CompletableDeferred<Unit>()
         realtimeClosed = closed
         // Type the growing transcript live into the field, applying only the minimal diff each time (#128) —
@@ -2885,8 +2879,13 @@ object DictateController {
             _state.value = UiState.Idle
             return
         }
+        val preserved = if (r.reason == RetainReason.INTERRUPTED) prefs.dictate.interruptedAudioPreservedText.get() else ""
         if (r.reason == RetainReason.INTERRUPTED) scope.launch { clearInterruptedAudioPref() }
         livePromptArmed = r.wasLive
+        if (preserved.isNotEmpty()) {
+            realtimeShown.setLength(0)
+            realtimeShown.append(preserved)
+        }
         // A user-initiated resend of already-captured audio is sent as-is (no silence gate — issue #93).
         // The failure it is retrying already has a history row, so this rewrites that one (#358) rather
         // than filing a second entry for the same recording — the chip and the ↻ in the History panel are
@@ -3009,7 +3008,44 @@ object DictateController {
      */
     fun stashRecordingOnHide(context: Context) {
         if (foreignDictationInFlight()) return
+        if (canContinueRecordingWithFloatingButton()) {
+            handoffToFloatingButton()
+            return
+        }
         stashRecording(context)
+    }
+
+    private fun isFloatingButtonHandoffSupported(): Boolean {
+        return prefs.dictate.floatingButtonEnabled.get() &&
+            prefs.dictate.floatingButtonShowWithDictateKeyboard.get() &&
+            prefs.dictate.floatingButtonContinueKeyboardRecording.get() &&
+            DictateAccessibilityService.isRunning
+    }
+
+    private fun canContinueRecordingWithFloatingButton(): Boolean {
+        if (outputTarget != OutputTarget.IME) return false
+        if (startJob?.isActive != true && _state.value !is UiState.Recording) return false
+        return isFloatingButtonHandoffSupported()
+    }
+
+    private fun handoffToFloatingButton() {
+        outputTarget = OutputTarget.OVERLAY
+        if (prefs.dictate.realtimePreserveOnHide.get()) {
+            DictateAccessibilityService.setInitialPreview(realtimeShown.toString())
+        } else {
+            realtimeContext?.let { ctx ->
+                runCatching { ImeDictationSink(ctx).clearDictationPreview(realtimeShown.toString()) }
+            }
+            realtimeShown.setLength(0)
+            DictateAccessibilityService.setInitialPreview("")
+        }
+        DictateAccessibilityService.startMicForeground()
+    }
+
+    fun onKeyboardShown() {
+        if (_state.value is UiState.Recording && outputTarget == OutputTarget.OVERLAY && isFloatingButtonHandoffSupported()) {
+            outputTarget = OutputTarget.IME
+        }
     }
 
     /**
@@ -3066,7 +3102,10 @@ object DictateController {
         realtimeSession = null
         realtimeClosed = null
         _interimText.value = ""
-        realtimeContext?.let { ctx -> runCatching { sink(ctx).clearDictationPreview(realtimeShown.toString()) } }
+        val preservedText = if (prefs.dictate.realtimePreserveOnHide.get()) realtimeShown.toString() else ""
+        if (!prefs.dictate.realtimePreserveOnHide.get()) {
+            realtimeContext?.let { ctx -> runCatching { sink(ctx).clearDictationPreview(realtimeShown.toString()) } }
+        }
         realtimeShown.setLength(0)
         realtimeTranscript.setLength(0)
         realtimeContext = null
@@ -3144,6 +3183,7 @@ object DictateController {
         scope.launch {
             prefs.dictate.interruptedAudioSeconds.set(keptSeconds)
             prefs.dictate.interruptedAudioLive.set(wasLive)
+            prefs.dictate.interruptedAudioPreservedText.set(preservedText)
             prefs.dictate.interruptedAudioPending.set(true)
         }
     }
@@ -3171,6 +3211,7 @@ object DictateController {
     private suspend fun clearInterruptedAudioPref() {
         if (prefs.dictate.interruptedAudioPending.get()) {
             prefs.dictate.interruptedAudioPending.set(false)
+            prefs.dictate.interruptedAudioPreservedText.set("")
         }
     }
 

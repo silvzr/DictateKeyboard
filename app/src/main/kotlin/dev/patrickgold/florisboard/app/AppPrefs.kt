@@ -541,11 +541,20 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "dictate__floating_button_enabled",
             default = false,
         )
+        val floatingButtonRealtimeTranscription = boolean(
+            key = "dictate__floating_button_realtime_transcription",
+            default = false,
+        )
         // Whether the floating button also shows while the Dictate keyboard itself is the active input
         // method. Default off: when our own keyboard is up it already has a mic key, so the bubble would
         // be redundant; turning this on shows it everywhere regardless of the active keyboard.
         val floatingButtonShowWithDictateKeyboard = boolean(
             key = "dictate__floating_button_show_with_dictate_keyboard",
+            default = false,
+        )
+        // Whether to continue recording via the floating button when the keyboard is closed mid-recording.
+        val floatingButtonContinueKeyboardRecording = boolean(
+            key = "dictate__floating_button_continue_keyboard_recording",
             default = false,
         )
         // Visual style of the floating button: a compact ring (RING) or a bubble that expands into a pill
@@ -682,6 +691,11 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
             key = "dictate__realtime_hide_preview",
             default = false,
         )
+        // Whether to preserve words transcribed in real time in the text field when the keyboard is closed.
+        val realtimePreserveOnHide = boolean(
+            key = "dictate__realtime_preserve_on_hide",
+            default = false,
+        )
         // --- Long-form segmented dictation (issue #170) ------------------------------------------
         // Transcribe long dictations segment-by-segment in the background while you keep talking, so you
         // don't wait for one big upload at the end. OFF by default; MANUAL shows the "Next" button, AUTO
@@ -746,6 +760,11 @@ abstract class FlorisPreferenceModel : PreferenceModel() {
         val interruptedAudioLive = boolean(
             key = "dictate__interrupted_audio_live",
             default = false,
+        )
+        // Words preserved in the editor when the recording was interrupted mid-stream.
+        val interruptedAudioPreservedText = string(
+            key = "dictate__interrupted_audio_preserved_text",
+            default = "",
         )
         // --- Transcription history / activity log (issue #140) -----------------------------------
         // Keep a rolling, browsable log of finished dictations (transcript + metadata) so they can be
