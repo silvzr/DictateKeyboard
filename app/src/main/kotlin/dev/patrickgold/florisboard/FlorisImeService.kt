@@ -391,7 +391,6 @@ class FlorisImeService : LifecycleInputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         flogInfo { "restarting=$restarting info=${info?.debugSummarize()}" }
         super.onStartInputView(info, restarting)
-        dev.patrickgold.florisboard.dictate.DictateController.onKeyboardShown()
         if (info == null) return
         val editorInfo = FlorisEditorInfo.wrap(info)
         activeState.batchEdit {
@@ -516,7 +515,6 @@ class FlorisImeService : LifecycleInputMethodService() {
 
     override fun onWindowShown() {
         super.onWindowShown()
-        dev.patrickgold.florisboard.dictate.DictateController.onKeyboardShown()
         if (windowController.onWindowShown()) {
             flogInfo(LogTopic.IMS_EVENTS)
             inputFeedbackController.updateSystemPrefsState()

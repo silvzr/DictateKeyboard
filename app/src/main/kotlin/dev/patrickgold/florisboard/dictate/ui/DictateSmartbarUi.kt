@@ -749,8 +749,6 @@ private fun RowScope.DismissButton() {
  */
 @Composable
 private fun RowScope.InterruptedContent(state: DictateController.UiState.Interrupted) {
-    val prefs by FlorisPreferenceStore
-    val preserveOnHide by prefs.dictate.realtimePreserveOnHide.collectAsState()
     val context = LocalContext.current
     val rowStyle = rememberSnyggThemeQuery(FlorisImeUi.SmartbarSharedActionsRow.elementName)
     Row(
@@ -788,9 +786,7 @@ private fun RowScope.InterruptedContent(state: DictateController.UiState.Interru
             contentDescription = stringRes(R.string.dictate__action_continue_recording),
         )
     }
-    if (!preserveOnHide) {
-        SendButton(onClick = { DictateController.sendRetainedAudio(context) })
-    }
+    SendButton(onClick = { DictateController.sendRetainedAudio(context) })
     DismissButton()
 }
 
