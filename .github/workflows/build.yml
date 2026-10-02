@@ -59,9 +59,50 @@ jobs:
         run: |
           chmod +x gradlew
           chmod +x tools/fetch-sherpa-onnx.sh
+          if [ -f "tools/bergamot/build-android.sh" ]; then
+            chmod +x tools/bergamot/build-android.sh
+          fi
 
       - name: Fetch Sherpa ONNX Libraries
         run: ./tools/fetch-sherpa-onnx.sh
+
+      - name: Cache Bergamot Native Library
+        id: cache-bergamot
+        uses: actions/cache@v4
+        with:
+          path: app/src/main/jniLibs/arm64-v8a/libdictate_bergamot.so
+          key: bergamot-${{ runner.os }}-${{ hashFiles('tools/bergamot/**', 'gradle/tools.versions.toml') }}
+
+      - name: Build Bergamot Native Library
+        if: steps.cache-bergamot.outputs.cache-hit != 'true'
+        run: |
+          if [ -f "tools/bergamot/build-android.sh" ]; then
+            echo "libdictate_bergamot.so not found in cache. Setting up build environment..."
+            sudo apt-get update && sudo apt-get install -y ninja-build
+
+            NDK_VERSION="$(grep '^ndk ' gradle/tools.versions.toml | sed -E 's/.*"(.*)".*/\1/')"
+            CMAKE_VERSION="$(grep '^cmake ' gradle/tools.versions.toml | sed -E 's/.*"(.*)".*/\1/')"
+
+            echo "Installing NDK $NDK_VERSION..."
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;$NDK_VERSION"
+
+            echo "Setting up CMake $CMAKE_VERSION..."
+            if [ ! -x "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin/cmake" ]; then
+              yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "cmake;$CMAKE_VERSION" || true
+            fi
+
+            if [ ! -x "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin/cmake" ]; then
+              echo "Symlinking system CMake and Ninja to $ANDROID_HOME/cmake/$CMAKE_VERSION/bin..."
+              mkdir -p "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin"
+              ln -sf "$(which cmake)" "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin/cmake"
+              ln -sf "$(which ninja)" "$ANDROID_HOME/cmake/$CMAKE_VERSION/bin/ninja"
+            fi
+
+            echo "Building libdictate_bergamot.so for arm64-v8a..."
+            ./tools/bergamot/build-android.sh arm64-v8a
+          else
+            echo "tools/bergamot/build-android.sh not found, skipping Bergamot build."
+          fi
 
       - name: Build APK
         run: ./gradlew :app:assembleRelease
